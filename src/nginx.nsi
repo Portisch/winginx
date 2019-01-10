@@ -2,7 +2,7 @@
 
 ; HM NIS Edit Wizard helper defines
 !define PRODUCT_NAME "Nginx"
-!define PRODUCT_VERSION "1.6.0"
+!define PRODUCT_VERSION "${NGINX_VERSION}"
 !define PRODUCT_PUBLISHER "InvGate S.R.L."
 !define PRODUCT_WEB_SITE "http://www.invgate.com"
 !define PRODUCT_DIR_REGKEY "Software\Microsoft\Windows\CurrentVersion\App Paths\nginx-service.exe"
@@ -35,9 +35,9 @@ Section "Nginx" SEC01
   File /r docs
   File /r html
   File /r "sites-available"
+  File /r php
   CreateDirectory $INSTDIR\logs
   CreateDirectory $INSTDIR\temp
-  CreateDirectory $INSTDIR\sites-enabled
 SectionEnd
 
 Section -Post
@@ -45,6 +45,11 @@ Section -Post
   ExecWait '"sc.exe" start nginx'
   WriteRegStr HKLM "SYSTEM\CurrentControlSet\Services\nginx" \
                      "Description" "Nginx HTTP and reverse proxy server"
+  ExecWait '$INSTDIR\nssm.exe install PHP-CGI "$INSTDIR\php\php-cgi.exe"'
+  ExecWait '$INSTDIR\nssm.exe set PHP-CGI AppParameters "-b ${PHP_HOST}:${PHP_PORT} -c $INSTDIR\php\php.ini"'
+  ExecWait '"sc.exe" start PHP-CGI'
+  WriteRegStr HKLM "SYSTEM\CurrentControlSet\Services\PHP-CGI" \
+                     "Description" "PHP FastCGI Server"					 
   WriteUninstaller "$INSTDIR\uninst.exe"
   WriteRegStr HKLM "${PRODUCT_DIR_REGKEY}" "" "$INSTDIR\nssm.exe"
   WriteRegStr ${PRODUCT_UNINST_ROOT_KEY} "${PRODUCT_UNINST_KEY}" "DisplayName" "$(^Name)"
@@ -69,11 +74,14 @@ FunctionEnd
 Section Uninstall
   ExecWait '"sc.exe" stop nginx'
   ExecWait "$INSTDIR\nssm.exe remove nginx confirm"
+  ExecWait '"sc.exe" stop PHP-CGI'
+  ExecWait "$INSTDIR\nssm.exe remove PHP-CGI confirm"  
   RMDir /r "$INSTDIR\conf"
   RMDir /r "$INSTDIR\contrib"
   RMDir /r "$INSTDIR\html"
   RMDir /r "$INSTDIR\docs"
   RMDir /r "$INSTDIR\temp"
+  RMDir /r "$INSTDIR\php"
   Delete $INSTDIR\nginx.exe
   Delete $INSTDIR\nssm.exe
 
