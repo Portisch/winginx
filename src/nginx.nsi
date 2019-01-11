@@ -8,6 +8,7 @@
 !define PRODUCT_DIR_REGKEY "Software\Microsoft\Windows\CurrentVersion\App Paths\nginx-service.exe"
 !define PRODUCT_UNINST_KEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\${PRODUCT_NAME}"
 !define PRODUCT_UNINST_ROOT_KEY "HKLM"
+!include LogicLib.nsh
 
 Name "${PRODUCT_NAME}" ; ${PRODUCT_VERSION}"
 OutFile "nginx-service.exe"
@@ -34,10 +35,11 @@ Section "Nginx" SEC01
   File /r ssl
   File /r docs
   File /r html
-  File /r "sites-available"
   File /r php
+  File /r Letsencrypt
   CreateDirectory $INSTDIR\logs
   CreateDirectory $INSTDIR\temp
+  CreateDirectory $INSTDIR\Certificate
 SectionEnd
 
 Section -Post
@@ -58,8 +60,144 @@ Section -Post
   WriteRegStr ${PRODUCT_UNINST_ROOT_KEY} "${PRODUCT_UNINST_KEY}" "DisplayVersion" "${PRODUCT_VERSION}"
   WriteRegStr ${PRODUCT_UNINST_ROOT_KEY} "${PRODUCT_UNINST_KEY}" "URLInfoAbout" "${PRODUCT_WEB_SITE}"
   WriteRegStr ${PRODUCT_UNINST_ROOT_KEY} "${PRODUCT_UNINST_KEY}" "Publisher" "${PRODUCT_PUBLISHER}"
+  Push "$INSTDIR\Letsencrypt\settings.config"
+  Push "CertificatePath"
+  Push 1 # line should be displayed for occurance number of the searched string, if empty string is passed or 0 the last occurance will be displayed
+  Call FileSearch
+  Pop $2 # the line number the string was found for specified occurance number
+  IntOp $2 $2 + 1
+  Push "    <value>$INSTDIR\Certificate</value>"
+  Push $2
+  Push '$INSTDIR\Letsencrypt\settings.config'
+  Call WriteToFileLine2
 SectionEnd
 
+Function FileSearch
+Pop $7 ;~~~~Piotrek occurance numberw
+Exch $R0 ;search for
+Exch
+Exch $R1 ;input file
+Push $R2
+Push $R3
+Push $R4
+Push $R5
+Push $R6
+Push $R7
+Push $R8
+Push $R9
+
+
+  StrLen $R4 $R0
+  StrCpy $R7 0
+  StrCpy $R8 0
+  ;~~~~Piotrek start
+  StrCpy $9 0
+  ${If} $7 == ""
+	StrCpy $7 0 ; occurence number user specified
+  ${EndIf}
+  ;~~~~Piotrek end
+  ClearErrors
+  FileOpen $R2 $R1 r
+  IfErrors Done
+
+  LoopRead:
+    ClearErrors
+    FileRead $R2 $R3
+    IfErrors DoneRead
+	IntOp $9 $9 + 1 ;Piotrek
+
+    IntOp $R7 $R7 + 1
+    StrCpy $R5 -1
+    StrCpy $R9 0
+
+    LoopParse:
+      IntOp $R5 $R5 + 1
+      StrCpy $R6 $R3 $R4 $R5
+      StrCmp $R6 "" 0 +4
+        StrCmp $R9 1 LoopRead
+          IntOp $R7 $R7 - 1
+          Goto LoopRead
+
+      StrCmp $R6 $R0 0 LoopParse
+        StrCpy $R9 1
+        IntOp $R8 $R8 + 1
+		;~~~~Piotrek start
+		${If} $R8 == $7 ;if occurence is specified - outputs a specified occurence if not last occurence is output]
+			StrCpy $0 $9
+			StrCpy $7 "-1"
+		${ElseIf} $7 == 0
+			StrCpy $0 $9
+		${EndIf}
+		;~~~~Piotrek end
+        Goto LoopParse
+
+  DoneRead:
+    FileClose $R2
+  Done:
+    StrCpy $R0 $R8
+    StrCpy $R1 $R7
+
+Pop $R9
+Pop $R8
+Pop $R7
+Pop $R6
+Pop $R5
+Pop $R4
+Pop $R3
+Pop $R2
+Exch $R1 ;number of lines found on
+Exch
+Exch $R0 ;output count found
+Push $0 ;You need to pop that out after function call as first parameter ````Piotrek
+FunctionEnd
+
+Function WriteToFileLine2
+Exch $0 ;file
+Exch
+Exch $1 ;line number
+Exch 2
+Exch $2 ;string to write
+Exch 2
+Push $3
+Push $4
+Push $5
+Push $6
+Push $7
+
+ GetTempFileName $7
+ FileOpen $4 $0 r
+ FileOpen $5 $7 w
+ StrCpy $3 0
+
+Loop:
+ClearErrors
+FileRead $4 $6
+IfErrors Exit
+ IntOp $3 $3 + 1
+ StrCmp $3 $1 0 +3
+FileWrite $5 "$2$\r$\n"
+Goto Loop
+FileWrite $5 $6
+Goto Loop
+Exit:
+
+ FileClose $5
+ FileClose $4
+
+SetDetailsPrint none
+Delete $0
+Rename $7 $0
+SetDetailsPrint both
+
+Pop $7
+Pop $6
+Pop $5
+Pop $4
+Pop $3
+Pop $2
+Pop $1
+Pop $0
+FunctionEnd
 
 Function un.onUninstSuccess
   HideWindow
